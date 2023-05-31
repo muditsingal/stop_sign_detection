@@ -9,15 +9,13 @@ import pytesseract as pts
 print(os.getcwd() + '/data.vd')
 
 '''
-stop  -> [396.75000, 138.87500, 457.75000, 201.37500]
+stop  -> 397, 115, 458, 177
 
-stop2 -> [595.00000, 120.00000, 655.00000, 184.25000]
+stop2 -> 290, 274, 373, 301
 
-stop3 -> [493.75000, 202.25000, 535.00000, 245.50000]
+stop3 -> 494, 178, 535, 222
 
-
-stop4 -> [695.50000, 189.50000, 726.50000, 233.75000]
-
+stop4 -> 696, 166, 726, 210
 '''
 
 
@@ -67,31 +65,30 @@ masked_img = cv2.bitwise_and(img_eq, img_eq, mask=mask)
 # masked_img[:, 459:] = 0
 
 
-# masked_img[:90] = 0
-# masked_img[162:] = 0
-# masked_img[:, :591] = 0
-# masked_img[:, 659:] = 0
-# 595.00000, 120.00000, 655.00000, 184.25000
+margin_percent = 10 / 100
+box_tl_x = 696
+box_tl_y = 166
+box_br_x = 726
+box_br_y = 210
+box_w = abs(box_br_x - box_tl_x)
+box_h = abs(box_br_y - box_tl_y)
+margin_x = int( box_w * margin_percent )
+margin_y = int( box_h * margin_percent )
 
-masked_img[:155] = 0
-masked_img[213:] = 0
-masked_img[:, :693] = 0
-masked_img[:, 729:] = 0
-# 695.50000, 189.50000, 726.50000, 233.75000
+masked_img[:box_tl_y - margin_y] = 0
+masked_img[box_br_y + margin_y:] = 0
+masked_img[:, :box_tl_x - margin_x] = 0
+masked_img[:, box_br_x + margin_x:] = 0
+# 696, 166, 726, 210
 
+
+img[:box_tl_y - margin_y] = 0
+img[box_br_y + margin_y:] = 0
+img[:, :box_tl_x - margin_x] = 0
+img[:, box_br_x + margin_x:] = 0
 
 
 edge_img = cv2.Canny(img_eq, 100, 200)
-# 396.75000, 138.87500, 457.75000, 201.37500
-# edge_img[:111] = 0
-# edge_img[183:] = 0
-# edge_img[:, :396] = 0
-# edge_img[:, 459:] = 0
-
-edge_img[:116] = 0
-edge_img[187:] = 0
-edge_img[:, :591] = 0
-edge_img[:, 659:] = 0
 
 stop_img = cv2.cvtColor(img_eq[111:183, 396:459], cv2.COLOR_BGR2GRAY)
 
@@ -156,13 +153,6 @@ for contour in contours:
 # cv2.destroyAllWindows()
 
 
-
-
-# contours, hierarchy = cv2.findContours(masked_gray, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-# cnt = sorted(contours, key=cv2.contourArea)
-# cnt0 = cnt[-1]
-# cv2.drawContours(img, [cnt0], 0, (0,255,0), 1)
-# cv2.drawContours(img, cnt, -1, (0,255,0), 2)
 
 ################################################################################################################################################
 
