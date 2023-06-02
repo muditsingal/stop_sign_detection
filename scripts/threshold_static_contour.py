@@ -15,14 +15,13 @@ import cv2
 # Reading the path
 curr_pwd = os.getcwd()
 img_path = curr_pwd + "/.." + '/src_imgs/'
-CASE = 3
-margin_percent = 4 / 100
+CASE = 2
+margin_percent = 1 / 100
 
 '''
 stop  -> 397, 115, 458, 177
 
-stop2 -> 290, 274, 373, 301
-595, 120, 655, 184
+stop2 -> 595, 120, 655, 184
 
 stop3 -> 494, 178, 535, 222
 
@@ -118,37 +117,29 @@ masked_img[:box_tl_y - margin_y] = 0
 masked_img[box_br_y + margin_y:] = 0
 masked_img[:, :box_tl_x - margin_x] = 0
 masked_img[:, box_br_x + margin_x:] = 0
+gray_masked = cv2.cvtColor(masked_img, cv2.COLOR_BGR2GRAY)
 
+masked_img = (gray_masked > 0).astype(np.uint8)*255
 
-# img[:box_tl_y - margin_y] = 0
-# img[box_br_y + margin_y:] = 0
-# img[:, :box_tl_x - margin_x] = 0
-# img[:, box_br_x + margin_x:] = 0
+contours, hierarchy = cv2.findContours(masked_img, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
+for contour in contours:
+    perimeter = cv2.arcLength(contour, True)
+    if cv2.contourArea(contour) < 150:
+        continue
 
-edge_img = cv2.Canny(img_eq, 100, 200)
+    approx = cv2.approxPolyDP(contour, 0.02 * perimeter, True)
 
-stop_img = cv2.cvtColor(img_eq[box_tl_y - margin_y:box_br_y + margin_y, box_tl_x - margin_x:box_br_x + margin_x], cv2.COLOR_BGR2GRAY)
-
-print(stop_img.shape)
-
-############################################################ Corner detection ##################################################################
-
-corners = cv2.goodFeaturesToTrack(stop_img, 8, 0.05, 8)
-print(corners)
-corners = np.int0(corners)
-
-for i in corners:
-    x,y = i.ravel()
-    cv2.circle(img_eq, (x+box_tl_x - margin_x, y+box_tl_y - margin_y), 3, 255, -1)
-
+    if len(approx) >= 8:  # Assuming an octagon has 8 vertices
+        print(approx)
+        cv2.drawContours(img, [approx], -1, (0, 255, 0), 2)
 
 
 cv2.imshow("Stop capture", img)
 # cv2.imshow("HSV Stop capture", img_hsv)
 cv2.imshow("Equalized img", img_eq)
 cv2.imshow("Masked img", masked_img)
-# cv2.imshow("Canny image", edge_img)
+cv2.imwrite("thres_stop3.jpg", img)
 
 cv2.waitKey(0)
 cv2.destroyAllWindows()

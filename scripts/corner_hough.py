@@ -15,14 +15,13 @@ import cv2
 # Reading the path
 curr_pwd = os.getcwd()
 img_path = curr_pwd + "/.." + '/src_imgs/'
-CASE = 3
+CASE = 0
 margin_percent = 4 / 100
 
 '''
 stop  -> 397, 115, 458, 177
 
-stop2 -> 290, 274, 373, 301
-595, 120, 655, 184
+stop2 -> 595, 120, 655, 184
 
 stop3 -> 494, 178, 535, 222
 
@@ -120,28 +119,35 @@ masked_img[:, :box_tl_x - margin_x] = 0
 masked_img[:, box_br_x + margin_x:] = 0
 
 
-# img[:box_tl_y - margin_y] = 0
-# img[box_br_y + margin_y:] = 0
-# img[:, :box_tl_x - margin_x] = 0
-# img[:, box_br_x + margin_x:] = 0
+img[:box_tl_y - margin_y] = 0
+img[box_br_y + margin_y:] = 0
+img[:, :box_tl_x - margin_x] = 0
+img[:, box_br_x + margin_x:] = 0
 
 
 edge_img = cv2.Canny(img_eq, 100, 200)
+edge_img[:box_tl_y - margin_y] = 0
+edge_img[box_br_y + margin_y:] = 0
+edge_img[:, :box_tl_x - margin_x] = 0
+edge_img[:, box_br_x + margin_x:] = 0
 
-stop_img = cv2.cvtColor(img_eq[box_tl_y - margin_y:box_br_y + margin_y, box_tl_x - margin_x:box_br_x + margin_x], cv2.COLOR_BGR2GRAY)
 
-print(stop_img.shape)
+lines = cv2.HoughLines(edge_img, 1, np.pi / 180, 23, None, 0, 0)
 
-############################################################ Corner detection ##################################################################
+if lines is not None:
+    print("Lines exist")
+    for i in range(0, len(lines)):
+        rho = lines[i][0][0]
+        theta = lines[i][0][1]
+        a = math.cos(theta)
+        b = math.sin(theta)
+        x0 = a * rho
+        y0 = b * rho
+        pt1 = (int(x0 + 1000*(-b)), int(y0 + 1000*(a)))
+        pt2 = (int(x0 - 1000*(-b)), int(y0 - 1000*(a)))
+        cv2.line(img_eq, pt1, pt2, (0,0,255), 1, cv2.LINE_AA)
 
-corners = cv2.goodFeaturesToTrack(stop_img, 8, 0.05, 8)
-print(corners)
-corners = np.int0(corners)
-
-for i in corners:
-    x,y = i.ravel()
-    cv2.circle(img_eq, (x+box_tl_x - margin_x, y+box_tl_y - margin_y), 3, 255, -1)
-
+img2 = cv2.cvtColor(img_hsv, cv2.COLOR_HSV2BGR)
 
 
 cv2.imshow("Stop capture", img)
