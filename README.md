@@ -2,4 +2,4 @@
 
 ## Robot localization using stop signs
 
-[!Alt text](flow_chart1.png "Flow chart")
+![Alt text](flow_chart1.png "Flow chart")
