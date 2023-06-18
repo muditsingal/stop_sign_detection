@@ -4,6 +4,19 @@ Project: Stop Sign corner detection for camera pose estimation
 University: University of Maryland, College Park
 '''
 
+'''
+Zed camera params
+height: 720
+width: 1280
+distortion_model: "plumb_bob"
+D: [0.0, 0.0, 0.0, 0.0, 0.0]
+K: [521.8381958007812, 0.0, 684.0656127929688, 0.0, 521.8381958007812, 350.3512268066406, 0.0, 0.0, 1.0]
+R: [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]
+P: [521.8381958007812, 0.0, 684.0656127929688, 0.0, 0.0, 521.8381958007812, 350.3512268066406, 0.0, 0.0, 0.0, 1.0, 0.0]
+
+'''
+
+
 # Imporing the necessary libraries
 import matplotlib.pyplot as plt
 import numpy as np
@@ -11,12 +24,75 @@ import math
 import os
 import datetime
 import cv2
+import octagon_points as pt_src
 
 # Reading the path
 curr_pwd = os.getcwd()
 img_path = curr_pwd + "/.." + '/src_imgs/'
 CASE = 3
 margin_percent = 1 / 100
+dist_coeffs = np.array([0.0, 0.0, 0.0, 0.0, 0.0])
+K = np.array([[521.8381958007812, 0.0, 684.0656127929688], 
+              [0.0, 521.8381958007812, 350.3512268066406], 
+              [0.0, 0.0, 1.0]])
+# K = np.array([  [1382.58398,    0,          945.743164], 
+#                 [0,             1383.57251, 527.04834], 
+#                 [0,             0,          1]])
+
+K_inv = np.linalg.inv(K)
+
+
+# Construct the A matrix as per the given formula in slides 
+def make_A_matrix(image_pts, world_pts):
+    A = np.zeros(shape=(2*len(image_pts),9), dtype=np.float32)
+    for i in range(0, 2*len(image_pts) - 1, 2):
+        x1 = world_pts[i//2][0]
+        y1 = world_pts[i//2][1]
+
+        x1_dash = image_pts[i//2][0]
+        y1_dash = image_pts[i//2][1]
+        A[i] = np.array([x1, y1, 1, 0, 0, 0, -x1_dash*x1, -x1_dash*y1, -x1_dash])
+        A[i+1] = np.array([0, 0, 0, x1, y1, 1, -y1_dash*x1, -y1_dash*y1, -y1_dash])
+
+    # print(A.shape)
+    return A
+
+# Function to calculate the H matrix as by finding the least eigen vector of A_transpose * A, scaling it by the h22 term 
+# and then rearranging into a 3x3 matrix
+def calc_H_matrix(A):
+    sq_A = np.matmul(A.T, A)
+    eig_vals, eig_vecs = np.linalg.eig(sq_A)
+    smallest_eig_vec = eig_vecs[:, np.argmin(eig_vals)]
+    smallest_eig_vec = smallest_eig_vec / smallest_eig_vec[-1]
+    H = smallest_eig_vec.reshape((3,3))
+
+    return H
+
+def compute_pose(H):
+    global K_inv    
+    r_t_mat = np.matmul(K_inv, H)
+
+    # Finding 2 lambdas from A1 and A2 vectors and taking average to get a better lambda
+    lambda1 = np.linalg.norm(r_t_mat[:,0])
+    lambda2 = np.linalg.norm(r_t_mat[:,1])
+    lambda_ = (lambda1 + lambda2)/2
+
+    # Scaling the matrix by lambda
+    r_t_mat_norm = r_t_mat / lambda_
+
+    # Extracting the pose rotation and translation vectors from the above matrix
+    r1_vec = r_t_mat_norm[:,0]
+    r2_vec = r_t_mat_norm[:,1]
+    t_vec = r_t_mat_norm[:,2]
+    r3_vec = np.cross(r1_vec, r2_vec)
+    R = np.vstack((r1_vec, r2_vec, r3_vec))
+    # R = np.vstack(R, r3_vec)
+    # R = R.T
+    print("R matrix is: \n", R)
+    print("T vector is: ", t_vec)
+    # print(t_vec)
+
+    return np.column_stack([r1_vec, r2_vec, r3_vec, t_vec])
 
 '''
 stop  -> 397, 115, 458, 177
@@ -110,6 +186,7 @@ gray_sub_img[mask] = 0
 gray_sub_img = (gray_sub_img > 0).astype(np.uint8)*255
 
 contours, hierarchy = cv2.findContours(gray_sub_img, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+final_img_pts = []
 
 for contour in contours:
     perimeter = cv2.arcLength(contour, True)
@@ -120,7 +197,36 @@ for contour in contours:
 
     if len(approx) >= 8:  # Assuming an octagon has 8 vertices
         print(approx)
-        cv2.drawContours(img, [approx], -1, (0, 255, 0), 2)
+        final_img_pts = approx.copy().reshape(approx.shape[0],2)
+        # final_img_pts.sort()
+        final_img_pts = final_img_pts[final_img_pts[:, 1].argsort()]
+        top4_pts = final_img_pts[:4]
+        top4_pts = top4_pts[top4_pts[:, 0].argsort()]
+        bottom4_pts = final_img_pts[-4:]
+        bottom4_pts = bottom4_pts[bottom4_pts[:, 0].argsort()]
+        final_img_pts = np.concatenate((top4_pts, bottom4_pts))
+        print(final_img_pts.shape)
+        print(pt_src.pts.shape)
+        print(final_img_pts[::2,:])
+
+        H, _ = cv2.findHomography(final_img_pts, pt_src.pts)
+        compute_pose(H)
+        print("H matrix using openCV function: \n", H)
+        A = make_A_matrix(final_img_pts, pt_src.pts)
+        H2 = calc_H_matrix(A)
+        print("H matrix using custom function: \n", H2)
+        compute_pose(H2)
+        retval, r_vec, t_vec = cv2.solvePnP(pt_src.pts_3d, final_img_pts.astype(np.float64), K, dist_coeffs, flags=cv2.SOLVEPNP_ITERATIVE)
+        print("Final t vec is: ", t_vec.reshape((3)))
+
+
+
+        # final_img_pts.roll(-1)/
+        # final_img_pts.sorted(key=lambda pt: (pt[0], pt[1]))
+        # sorted_indices = np.sort()
+        # sorted_points = final_img_pts[sorted_indices]
+        # print(final_img_pts)
+        cv2.drawContours(img, [final_img_pts], -1, (0, 255, 0), 2)
 
 
 cv2.imshow("Stop capture", img)
