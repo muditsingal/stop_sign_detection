@@ -122,6 +122,7 @@ gray_masked = cv2.cvtColor(masked_img, cv2.COLOR_BGR2GRAY)
 masked_img = (gray_masked > 0).astype(np.uint8)*255
 
 contours, hierarchy = cv2.findContours(masked_img, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+cv2.rectangle(img, (box_tl_x, box_tl_y), (box_br_x,box_br_y), (255, 0, 0), 1)
 
 for contour in contours:
     perimeter = cv2.arcLength(contour, True)
@@ -132,7 +133,7 @@ for contour in contours:
 
     if len(approx) >= 8:  # Assuming an octagon has 8 vertices
         print(approx)
-        cv2.drawContours(img, [approx], -1, (0, 255, 0), 2)
+        # cv2.drawContours(img, [approx], -1, (0, 255, 0), 2)
 
 
 cv2.imshow("Stop capture", img)

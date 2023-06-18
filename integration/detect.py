@@ -99,8 +99,7 @@ def detect(save_img=False):
 
         # Process detections
         for i, det in enumerate(pred):  # detections per image
-            if det[4] == 11.0:
-                print(det)
+
             if webcam:  # batch_size >= 1
                 p, s, im0, frame = path[i], '%g: ' % i, im0s[i].copy(), dataset.count
             else:
@@ -113,6 +112,9 @@ def detect(save_img=False):
             if len(det):
                 # Rescale boxes from img_size to im0 size
                 det[:, :4] = scale_coords(img.shape[2:], det[:, :4], im0.shape).round()
+                for box in det:
+                    if box[5] == 11.0:
+                        print(box)
 
                 # Print results
                 for c in det[:, -1].unique():
