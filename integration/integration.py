@@ -1,3 +1,20 @@
+'''
+Author: Mudit Singal
+Project: Stop Sign corner detection for camera pose estimation
+University: University of Maryland, College Park
+'''
+
+'''
+Zed camera params
+height: 720
+width: 1280
+distortion_model: "plumb_bob"
+D: [0.0, 0.0, 0.0, 0.0, 0.0]
+K: [521.8381958007812, 0.0, 684.0656127929688, 0.0, 521.8381958007812, 350.3512268066406, 0.0, 0.0, 1.0]
+R: [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]
+P: [521.8381958007812, 0.0, 684.0656127929688, 0.0, 0.0, 521.8381958007812, 350.3512268066406, 0.0, 0.0, 0.0, 1.0, 0.0]
+'''
+
 import argparse
 import time
 from pathlib import Path
@@ -6,6 +23,9 @@ import cv2
 import torch
 import torch.backends.cudnn as cudnn
 from numpy import random
+import numpy as np
+import os
+import datetime
 
 from models.experimental import attempt_load
 from utils.datasets import LoadStreams, LoadImages
@@ -14,6 +34,66 @@ from utils.general import check_img_size, check_requirements, check_imshow, non_
 from utils.plots import plot_one_box
 from utils.torch_utils import select_device, load_classifier, time_synchronized, TracedModel
 
+import data.octagon_points as pt_src
+
+margin_percent = 1 / 100
+dist_coeffs = np.array([0.0, 0.0, 0.0, 0.0, 0.0])
+K = np.array([[521.8381958007812, 0.0, 684.0656127929688], 
+              [0.0, 521.8381958007812, 350.3512268066406], 
+              [0.0, 0.0, 1.0]])
+K_inv = np.linalg.inv(K)
+
+# Construct the A matrix as per the given formula in slides 
+def make_A_matrix(image_pts, world_pts):
+    A = np.zeros(shape=(2*len(image_pts),9), dtype=np.float32)
+    for i in range(0, 2*len(image_pts) - 1, 2):
+        x1 = world_pts[i//2][0]
+        y1 = world_pts[i//2][1]
+
+        x1_dash = image_pts[i//2][0]
+        y1_dash = image_pts[i//2][1]
+        A[i] = np.array([x1, y1, 1, 0, 0, 0, -x1_dash*x1, -x1_dash*y1, -x1_dash])
+        A[i+1] = np.array([0, 0, 0, x1, y1, 1, -y1_dash*x1, -y1_dash*y1, -y1_dash])
+
+    # print(A.shape)
+    return A
+
+# Function to calculate the H matrix as by finding the least eigen vector of A_transpose * A, scaling it by the h22 term 
+# and then rearranging into a 3x3 matrix
+def calc_H_matrix(A):
+    sq_A = np.matmul(A.T, A)
+    eig_vals, eig_vecs = np.linalg.eig(sq_A)
+    smallest_eig_vec = eig_vecs[:, np.argmin(eig_vals)]
+    smallest_eig_vec = smallest_eig_vec / smallest_eig_vec[-1]
+    H = smallest_eig_vec.reshape((3,3))
+
+    return H
+
+def compute_pose(H):
+    global K_inv    
+    r_t_mat = np.matmul(K_inv, H)
+
+    # Finding 2 lambdas from A1 and A2 vectors and taking average to get a better lambda
+    lambda1 = np.linalg.norm(r_t_mat[:,0])
+    lambda2 = np.linalg.norm(r_t_mat[:,1])
+    lambda_ = (lambda1 + lambda2)/2
+
+    # Scaling the matrix by lambda
+    r_t_mat_norm = r_t_mat / lambda_
+
+    # Extracting the pose rotation and translation vectors from the above matrix
+    r1_vec = r_t_mat_norm[:,0]
+    r2_vec = r_t_mat_norm[:,1]
+    t_vec = r_t_mat_norm[:,2]
+    r3_vec = np.cross(r1_vec, r2_vec)
+    R = np.vstack((r1_vec, r2_vec, r3_vec))
+    # R = np.vstack(R, r3_vec)
+    # R = R.T
+    print("R matrix is: \n", R)
+    print("T vector is: ", t_vec)
+    # print(t_vec)
+
+    return np.column_stack([r1_vec, r2_vec, r3_vec, t_vec])
 
 def detect(save_img=False):
     source, weights, view_img, save_txt, imgsz, trace = opt.source, opt.weights, opt.view_img, opt.save_txt, opt.img_size, not opt.no_trace
@@ -40,13 +120,6 @@ def detect(save_img=False):
 
     if half:
         model.half()  # to FP16
-
-    # Second-stage classifier
-    classify = False
-    # classify = True
-    if classify:
-        modelc = load_classifier(name='resnet101', n=2)  # initialize
-        modelc.load_state_dict(torch.load('resnet101.pt', map_location=device)['model']).to(device).eval()
 
     # Set Dataloader
     vid_path, vid_writer = None, None
@@ -93,9 +166,6 @@ def detect(save_img=False):
         pred = non_max_suppression(pred, opt.conf_thres, opt.iou_thres, classes=opt.classes, agnostic=opt.agnostic_nms)
         t3 = time_synchronized()
 
-        # Apply Classifier
-        if classify:
-            pred = apply_classifier(pred, modelc, img, im0s)
 
         # Process detections
         for i, det in enumerate(pred):  # detections per image
@@ -114,57 +184,20 @@ def detect(save_img=False):
                 det[:, :4] = scale_coords(img.shape[2:], det[:, :4], im0.shape).round()
                 for box in det:
                     if box[5] == 11.0:
-                        box_np = box.detach().to('cpu').numpy()
+                        box_np = box.detach().to('cpu').numpy().copy()
+                        box_tl_x = box_np[0]
+                        box_tl_y = box_np[1]
+                        box_br_x = box_np[2]
+                        box_br_y = box_np[3]
+                        box_w = abs(box_br_x - box_tl_x)
+                        box_h = abs(box_br_y - box_tl_y)
+                        margin_x = int( box_w * margin_percent )
+                        margin_y = int( box_h * margin_percent )
                         print(box_np)
 
-                # Print results
-                for c in det[:, -1].unique():
-                    n = (det[:, -1] == c).sum()  # detections per class
-                    s += f"{n} {names[int(c)]}{'s' * (n > 1)}, "  # add to string
-
-                # Write results
-                for *xyxy, conf, cls in reversed(det):
-                    if save_txt:  # Write to file
-                        xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
-                        line = (cls, *xywh, conf) if opt.save_conf else (cls, *xywh)  # label format
-                        with open(txt_path + '.txt', 'a') as f:
-                            f.write(('%g ' * len(line)).rstrip() % line + '\n')
-
-                    if save_img or view_img:  # Add bbox to image
-                        label = f'{names[int(cls)]} {conf:.2f}'
-                        plot_one_box(xyxy, im0, label=label, color=colors[int(cls)], line_thickness=1)
 
             # Print time (inference + NMS)
             # print(f'{s}Done. ({(1E3 * (t2 - t1)):.1f}ms) Inference, ({(1E3 * (t3 - t2)):.1f}ms) NMS')
-
-            # Stream results
-            if view_img:
-                cv2.imshow(str(p), im0)
-                cv2.waitKey(0)  # 1 millisecond
-
-            # Save results (image with detections)
-            if save_img:
-                if dataset.mode == 'image':
-                    cv2.imwrite(save_path, im0)
-                    print(f" The image with the result is saved in: {save_path}")
-                else:  # 'video' or 'stream'
-                    if vid_path != save_path:  # new video
-                        vid_path = save_path
-                        if isinstance(vid_writer, cv2.VideoWriter):
-                            vid_writer.release()  # release previous video writer
-                        if vid_cap:  # video
-                            fps = vid_cap.get(cv2.CAP_PROP_FPS)
-                            w = int(vid_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-                            h = int(vid_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-                        else:  # stream
-                            fps, w, h = 30, im0.shape[1], im0.shape[0]
-                            save_path += '.mp4'
-                        vid_writer = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (w, h))
-                    vid_writer.write(im0)
-
-    if save_txt or save_img:
-        s = f"\n{len(list(save_dir.glob('labels/*.txt')))} labels saved to {save_dir / 'labels'}" if save_txt else ''
-        #print(f"Results saved to {save_dir}{s}")
 
     print(f'Done. ({time.time() - t0:.3f}s)')
 
