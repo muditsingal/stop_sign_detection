@@ -253,10 +253,10 @@ def detect(save_img=False):
                 for box in det:
                     if box[5] == 11.0:
                         box_np = box.detach().to('cpu').numpy().copy()
-                        box_tl_x = box_np[0]
-                        box_tl_y = box_np[1]
-                        box_br_x = box_np[2]
-                        box_br_y = box_np[3]
+                        box_tl_x = int(box_np[0])
+                        box_tl_y = int(box_np[1])
+                        box_br_x = int(box_np[2])
+                        box_br_y = int(box_np[3])
                         box_w = abs(box_br_x - box_tl_x)
                         box_h = abs(box_br_y - box_tl_y)
                         margin_x = int( box_w * margin_percent )
