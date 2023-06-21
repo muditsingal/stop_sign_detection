@@ -171,6 +171,7 @@ hist = cv2.calcHist([gray_sub_img],[0],None,[256],[0,256])
 sub_hist = hist[8:-8]
 max_idx = np.argmax(sub_hist) + 8
 hist_roi = hist[max_idx-hist_pad:max_idx+hist_pad+1]
+print(hist_roi)
 print(hist[max_idx])
 # hist = sorted(hist)
 print(sub_img.shape[0]*sub_img.shape[1])
@@ -181,7 +182,7 @@ print(np.sum(hist))
 
 
 # mask = (gray_sub_img < hist[max_idx-hist_pad]) | (gray_sub_img > hist[max_idx])
-mask = (gray_sub_img < 2) | (gray_sub_img > hist[max_idx])
+mask = (gray_sub_img < 2) | (gray_sub_img > hist[max_idx]+hist_pad)
 gray_sub_img[mask] = 0
 gray_sub_img = (gray_sub_img > 0).astype(np.uint8)*255
 
@@ -198,6 +199,7 @@ for contour in contours:
     if len(approx) >= 8:  # Assuming an octagon has 8 vertices
         print(approx)
         final_img_pts = approx.copy().reshape(approx.shape[0],2)
+        cv2.drawContours(img, [final_img_pts], -1, (0, 255, 0), 2)
         # final_img_pts.sort()
         final_img_pts = final_img_pts[final_img_pts[:, 1].argsort()]
         top4_pts = final_img_pts[:4]
@@ -226,7 +228,7 @@ for contour in contours:
         # sorted_indices = np.sort()
         # sorted_points = final_img_pts[sorted_indices]
         # print(final_img_pts)
-        cv2.drawContours(img, [final_img_pts], -1, (0, 255, 0), 2)
+        
 
 
 cv2.imshow("Stop capture", img)

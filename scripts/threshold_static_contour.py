@@ -15,7 +15,7 @@ import cv2
 # Reading the path
 curr_pwd = os.getcwd()
 img_path = curr_pwd + "/.." + '/src_imgs/'
-CASE = 2
+CASE = 0
 margin_percent = 1 / 100
 
 '''

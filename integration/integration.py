@@ -95,6 +95,74 @@ def compute_pose(H):
 
     return np.column_stack([r1_vec, r2_vec, r3_vec, t_vec])
 
+
+def mask_img_hist(img, box_tl_x, box_tl_y, box_br_x, box_br_y, margin_x, margin_y):
+    # Masking regions outside the stop sign box
+    stop_isolated = np.copy(img)
+    stop_isolated[:box_tl_y - margin_y] = 0
+    stop_isolated[box_br_y + margin_y:] = 0
+    stop_isolated[:, :box_tl_x - margin_x] = 0
+    stop_isolated[:, box_br_x + margin_x:] = 0
+
+    hist_pad = 8
+
+    sub_img = img[box_tl_y - margin_y : box_br_y + margin_y, box_tl_x - margin_x : box_br_x + margin_x]
+
+    gray_sub_img = cv2.cvtColor(stop_isolated, cv2.COLOR_BGR2GRAY)
+    hist = cv2.calcHist([gray_sub_img],[0],None,[256],[0,256])
+    sub_hist = hist[8:-8]
+    max_idx = np.argmax(sub_hist) + 8
+    hist_roi = hist[max_idx-hist_pad:max_idx+hist_pad+1]
+
+
+    # mask = (gray_sub_img < hist[max_idx-hist_pad]) | (gray_sub_img > hist[max_idx])
+    mask = (gray_sub_img < 2) | (gray_sub_img > hist[max_idx])
+    gray_sub_img[mask] = 0
+    gray_sub_img = (gray_sub_img > 0).astype(np.uint8)*255
+    return gray_sub_img
+
+def find_sign_corners(img):
+    contours, hierarchy = cv2.findContours(img, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    final_img_pts = []
+
+    for contour in contours:
+        perimeter = cv2.arcLength(contour, True)
+        if cv2.contourArea(contour) < 150:
+            continue
+
+        approx = cv2.approxPolyDP(contour, 0.02 * perimeter, True)
+
+        if len(approx) >= 8:  # Assuming an octagon has 8 vertices
+            print(approx)
+            final_img_pts = approx.copy().reshape(approx.shape[0],2)
+            cv2.drawContours(img, [final_img_pts], -1, (0, 255, 0), 2)
+            # final_img_pts.sort()
+            final_img_pts = final_img_pts[final_img_pts[:, 1].argsort()]
+            top4_pts = final_img_pts[:4]
+            top4_pts = top4_pts[top4_pts[:, 0].argsort()]
+            bottom4_pts = final_img_pts[-4:]
+            bottom4_pts = bottom4_pts[bottom4_pts[:, 0].argsort()]
+            final_img_pts = np.concatenate((top4_pts, bottom4_pts))
+            return final_img_pts
+
+
+def find_cam_pose_homography(img_pts, world_pts_2d):
+    H, _ = cv2.findHomography(img_pts, world_pts_2d)
+    compute_pose(H)
+    print("H matrix using openCV function: \n", H)
+    A = make_A_matrix(img_pts, world_pts_2d)
+    H2 = calc_H_matrix(A)
+    print("H matrix using custom function: \n", H2)
+    compute_pose(H2)
+
+
+def find_cam_pose_PnP(img_pts, world_pts_3d):
+    global K, dist_coeffs
+    retval, r_vec, t_vec = cv2.solvePnP(world_pts_3d, img_pts.astype(np.float64), K, dist_coeffs, flags=cv2.SOLVEPNP_ITERATIVE)
+    print("Final t vec is: ", t_vec.reshape((3)))
+
+
+
 def detect(save_img=False):
     source, weights, view_img, save_txt, imgsz, trace = opt.source, opt.weights, opt.view_img, opt.save_txt, opt.img_size, not opt.no_trace
     save_img = not opt.nosave and not source.endswith('.txt')  # save inference images
@@ -194,6 +262,10 @@ def detect(save_img=False):
                         margin_x = int( box_w * margin_percent )
                         margin_y = int( box_h * margin_percent )
                         print(box_np)
+
+                        masked_img = mask_img_hist(im0, box_tl_x, box_tl_y, box_br_x, box_br_y, margin_x, margin_y)
+                        corner_img_pts = find_sign_corners(masked_img)
+                        find_cam_pose_PnP(corner_img_pts, pt_src.pts_3d)
 
 
             # Print time (inference + NMS)
