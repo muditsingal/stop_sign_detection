@@ -25,11 +25,12 @@ import os
 import datetime
 import cv2
 import octagon_points as pt_src
+from scipy.spatial.transform import Rotation
 
 # Reading the path
 curr_pwd = os.getcwd()
 img_path = curr_pwd + "/.." + '/src_imgs/'
-CASE = 3
+CASE = 2
 margin_percent = 1 / 100
 dist_coeffs = np.array([0.0, 0.0, 0.0, 0.0, 0.0])
 K = np.array([[521.8381958007812, 0.0, 684.0656127929688], 
@@ -93,6 +94,34 @@ def compute_pose(H):
     # print(t_vec)
 
     return np.column_stack([r1_vec, r2_vec, r3_vec, t_vec])
+
+
+# Function to compute the transformation matrix for the translation and rotation vector (axis-angle representation) returned by solvePnP cv2 function
+def compute_T_from_vecs(retval, r_vec, t_vec):
+    if retval == False:
+        return None
+
+    R, _ = cv2.Rodrigues(r_vec)
+    T = np.column_stack((R, t_vec))
+    T = np.vstack((T, [0,0,0,1]))
+
+    return T
+
+def compute_rpy_from_r_vec(retval, r_vec):
+    if retval == False:
+        return None
+
+    R, _ = cv2.Rodrigues(r_vec)
+    roll = cv2.RQDecomp3x3(R)
+    return roll
+
+
+def rotationMatrixToEulerAngles(r_vec):
+    R, _ = cv2.Rodrigues(r_vec)
+    r = Rotation.from_matrix(R)
+    euler = r.as_euler('xyz', degrees=True)
+    roll, pitch, yaw = euler[0], euler[1], euler[2]
+    return roll, pitch, yaw
 
 '''
 stop  -> 397, 115, 458, 177
@@ -219,7 +248,18 @@ for contour in contours:
         print("H matrix using custom function: \n", H2)
         compute_pose(H2)
         retval, r_vec, t_vec = cv2.solvePnP(pt_src.pts_3d, final_img_pts.astype(np.float64), K, dist_coeffs, flags=cv2.SOLVEPNP_ITERATIVE)
+
+        T = compute_T_from_vecs(retval, r_vec, t_vec)
         print("Final t vec is: ", t_vec.reshape((3)))
+        print("Transformation matrix is: \n" ,T)
+        roll, pitch, yaw = rotationMatrixToEulerAngles(r_vec)
+        r = Rotation.from_euler('xyz', [roll, pitch, yaw], degrees=True)
+        rotation_matrix = r.as_matrix()
+        print("The roll, pitch, yaw are: ", roll, pitch, yaw )
+        print(rotation_matrix)
+        # print("Rotation matrix", )
+        # rotationMatrixToEulerAngles(R)
+
 
 
 
