@@ -26,6 +26,7 @@ import datetime
 import cv2
 import octagon_points as pt_src
 from scipy.spatial.transform import Rotation
+import base_cam_transformation as trans
 
 # Reading the path
 curr_pwd = os.getcwd()
@@ -107,17 +108,15 @@ def compute_T_from_vecs(retval, r_vec, t_vec):
 
     return T
 
-def compute_rpy_from_r_vec(retval, r_vec):
-    if retval == False:
-        return None
 
+def rvec_to_euler_angles(r_vec):
     R, _ = cv2.Rodrigues(r_vec)
-    roll = cv2.RQDecomp3x3(R)
-    return roll
+    r = Rotation.from_matrix(R)
+    euler = r.as_euler('xyz', degrees=True)
+    roll, pitch, yaw = euler[0], euler[1], euler[2]
+    return roll, pitch, yaw
 
-
-def rotationMatrixToEulerAngles(r_vec):
-    R, _ = cv2.Rodrigues(r_vec)
+def rotation_matrix_to_euler_angles(R):
     r = Rotation.from_matrix(R)
     euler = r.as_euler('xyz', degrees=True)
     roll, pitch, yaw = euler[0], euler[1], euler[2]
@@ -250,15 +249,16 @@ for contour in contours:
         retval, r_vec, t_vec = cv2.solvePnP(pt_src.pts_3d, final_img_pts.astype(np.float64), K, dist_coeffs, flags=cv2.SOLVEPNP_ITERATIVE)
 
         T = compute_T_from_vecs(retval, r_vec, t_vec)
+        # T = T @ trans.T_final
         print("Final t vec is: ", t_vec.reshape((3)))
         print("Transformation matrix is: \n" ,T)
-        roll, pitch, yaw = rotationMatrixToEulerAngles(r_vec)
+        roll, pitch, yaw = rotation_matrix_to_euler_angles(T[:3, :3])
         r = Rotation.from_euler('xyz', [roll, pitch, yaw], degrees=True)
         rotation_matrix = r.as_matrix()
         print("The roll, pitch, yaw are: ", roll, pitch, yaw )
         print(rotation_matrix)
         # print("Rotation matrix", )
-        # rotationMatrixToEulerAngles(R)
+        # rotation_matrix_to_euler_angles(R)
 
 
 
