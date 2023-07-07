@@ -23,5 +23,5 @@ T_cam_center     = compute_T_from_vecs(1.61079632679, -1.57079632679, 0.0, 0.06,
 
 T_final = np.matmul(T_base_cam_mount, T_cam_mount_cam, T_cam_center)
 roll_f, pitch_f, yaw_f = rotation_matrix_to_euler_angles(T_final[:3,:3])
-print(T_final)
-print(roll_f, pitch_f, yaw_f)
+# print(T_final)
+# print(roll_f, pitch_f, yaw_f)

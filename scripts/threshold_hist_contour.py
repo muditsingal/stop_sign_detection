@@ -31,7 +31,7 @@ import base_cam_transformation as trans
 # Reading the path
 curr_pwd = os.getcwd()
 img_path = curr_pwd + "/.." + '/src_imgs/'
-CASE = 2
+CASE = 3
 margin_percent = 1 / 100
 dist_coeffs = np.array([0.0, 0.0, 0.0, 0.0, 0.0])
 K = np.array([[521.8381958007812, 0.0, 684.0656127929688], 
@@ -227,8 +227,7 @@ for contour in contours:
     if len(approx) >= 8:  # Assuming an octagon has 8 vertices
         print(approx)
         final_img_pts = approx.copy().reshape(approx.shape[0],2)
-        cv2.drawContours(img, [final_img_pts], -1, (0, 255, 0), 2)
-        # final_img_pts.sort()
+        # cv2.drawContours(img, [final_img_pts], -1, (0, 255, 0), 2)
         final_img_pts = final_img_pts[final_img_pts[:, 1].argsort()]
         top4_pts = final_img_pts[:4]
         top4_pts = top4_pts[top4_pts[:, 0].argsort()]
@@ -237,7 +236,7 @@ for contour in contours:
         final_img_pts = np.concatenate((top4_pts, bottom4_pts))
         print(final_img_pts.shape)
         print(pt_src.pts.shape)
-        print(final_img_pts[::2,:])
+        print(final_img_pts)
 
         H, _ = cv2.findHomography(final_img_pts, pt_src.pts)
         compute_pose(H)
@@ -257,6 +256,22 @@ for contour in contours:
         rotation_matrix = r.as_matrix()
         print("The roll, pitch, yaw are: ", roll, pitch, yaw )
         print(rotation_matrix)
+
+
+        # Draw coordinate frame on image
+        axis_len = 700
+        axis_thickness = 3
+        axes = np.array([[axis_len,0,0], [0,axis_len,0], [0,0,axis_len]], dtype=np.float32)
+        img_axes, jacobian = cv2.projectPoints(axes, r_vec, t_vec, K, dist_coeffs)
+        img_axes = img_axes.reshape(-1, 2).astype(np.int32)
+        axis_origin = final_img_pts[5]
+        cv2.line(img, axis_origin, img_axes[0], (255,0,0), axis_thickness)
+        cv2.line(img, axis_origin, img_axes[1], (0,255,0), axis_thickness)
+        cv2.line(img, axis_origin, img_axes[2], (0,0,255), axis_thickness)
+
+        print(img_axes)
+
+
         # print("Rotation matrix", )
         # rotation_matrix_to_euler_angles(R)
 

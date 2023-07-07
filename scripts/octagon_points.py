@@ -31,8 +31,13 @@ pts = np.vstack((pts, np.array([down_pt_x2, down_pts_y])))
 pts = np.vstack((pts, np.array([oct_size, 0])))
 zeros = np.array([[0], [0], [0], [0], [0], [0], [0], [0]])
 
-pts = pts + np.array([0, 178.5477061886])
+# pts = pts + np.array([0, 178.5477061886])
+
+pts = pts + np.array([-178.5477061886, 178.5477061886])
+
 pts_3d = np.concatenate([pts, zeros], axis=1)
+
+# print(pts_3d)
 
 # plt.plot(pts[:, 0], pts[:, 1])
 # plt.xlim([-700, 700])
