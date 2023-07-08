@@ -122,6 +122,17 @@ def rotation_matrix_to_euler_angles(R):
     roll, pitch, yaw = euler[0], euler[1], euler[2]
     return roll, pitch, yaw
 
+
+def draw_obj_frame(r_vec, t_vec, img, image_points, axis_len=700, axis_thickness=3):
+    global K, dist_coeffs
+    axes = np.array([[axis_len,0,0], [0,axis_len,0], [0,0,axis_len]], dtype=np.float32)
+    img_axes, jacobian = cv2.projectPoints(axes, r_vec, t_vec, K, dist_coeffs)
+    img_axes = img_axes.reshape(-1, 2).astype(np.int32)
+    axis_origin = image_points[5]
+    cv2.line(img, axis_origin, img_axes[0], (255,0,0), axis_thickness)
+    cv2.line(img, axis_origin, img_axes[1], (0,255,0), axis_thickness)
+    cv2.line(img, axis_origin, img_axes[2], (0,0,255), axis_thickness)
+
 '''
 stop  -> 397, 115, 458, 177
 
@@ -245,7 +256,11 @@ for contour in contours:
         H2 = calc_H_matrix(A)
         print("H matrix using custom function: \n", H2)
         compute_pose(H2)
+        # Uses the Levenberg-Marquardt optimization method
         retval, r_vec, t_vec = cv2.solvePnP(pt_src.pts_3d, final_img_pts.astype(np.float64), K, dist_coeffs, flags=cv2.SOLVEPNP_ITERATIVE)
+        # Infinitesimal Plane-Based Pose Estimation, the results don't vary significantly when compared to the iterative PnP process 
+        # retval, r_vec, t_vec = cv2.solvePnP(pt_src.pts_3d, final_img_pts.astype(np.float64), K, dist_coeffs, flags=cv2.SOLVEPNP_IPPE)
+        # cv2.solvePnPRansac() uses ransac with iterative process, however the results returned are nearly identical when compared to the iterative process
 
         T = compute_T_from_vecs(retval, r_vec, t_vec)
         # T = T @ trans.T_final
@@ -259,17 +274,8 @@ for contour in contours:
 
 
         # Draw coordinate frame on image
-        axis_len = 700
-        axis_thickness = 3
-        axes = np.array([[axis_len,0,0], [0,axis_len,0], [0,0,axis_len]], dtype=np.float32)
-        img_axes, jacobian = cv2.projectPoints(axes, r_vec, t_vec, K, dist_coeffs)
-        img_axes = img_axes.reshape(-1, 2).astype(np.int32)
-        axis_origin = final_img_pts[5]
-        cv2.line(img, axis_origin, img_axes[0], (255,0,0), axis_thickness)
-        cv2.line(img, axis_origin, img_axes[1], (0,255,0), axis_thickness)
-        cv2.line(img, axis_origin, img_axes[2], (0,0,255), axis_thickness)
+        draw_obj_frame(r_vec, t_vec, img, image_points=final_img_pts, axis_len=700, axis_thickness=3)
 
-        print(img_axes)
 
 
         # print("Rotation matrix", )
