@@ -112,13 +112,13 @@ def compute_T_from_vecs(retval, r_vec, t_vec):
 def rvec_to_euler_angles(r_vec):
     R, _ = cv2.Rodrigues(r_vec)
     r = Rotation.from_matrix(R)
-    euler = r.as_euler('xyz', degrees=True)
+    euler = r.as_euler('xyz', degrees=False)
     roll, pitch, yaw = euler[0], euler[1], euler[2]
     return roll, pitch, yaw
 
 def rotation_matrix_to_euler_angles(R):
     r = Rotation.from_matrix(R)
-    euler = r.as_euler('xyz', degrees=True)
+    euler = r.as_euler('xyz', degrees=False)
     roll, pitch, yaw = euler[0], euler[1], euler[2]
     return roll, pitch, yaw
 
@@ -128,10 +128,47 @@ def draw_obj_frame(r_vec, t_vec, img, image_points, axis_len=700, axis_thickness
     axes = np.array([[axis_len,0,0], [0,axis_len,0], [0,0,axis_len]], dtype=np.float32)
     img_axes, jacobian = cv2.projectPoints(axes, r_vec, t_vec, K, dist_coeffs)
     img_axes = img_axes.reshape(-1, 2).astype(np.int32)
-    axis_origin = image_points[5]
+    axis_origin = (image_points[5]+image_points[6])//2
     cv2.line(img, axis_origin, img_axes[0], (255,0,0), axis_thickness)
     cv2.line(img, axis_origin, img_axes[1], (0,255,0), axis_thickness)
     cv2.line(img, axis_origin, img_axes[2], (0,0,255), axis_thickness)
+
+# Function to make a pose in ROS format viz. x, y, z, roll, pitch, yaw
+def make_pose_xyzrpy(pos_vec, r_vec):
+    roll, pitch, yaw = rvec_to_euler_angles(r_vec)
+    euler_vec = np.array([roll, pitch, yaw], dtype=np.float32)
+    curr_pose = np.append(pos_vec, euler_vec)
+    return curr_pose
+
+# Function to calculate the error in position of 2 poses using L2 norm
+def compute_pose_position_err(expected_pose, curr_pose):
+    err = np.linalg.norm(expected_pose[:3]-curr_pose[:3])/10  # To make error in cm
+    return err
+
+# Function to calculate the rotational difference of 2 poses using rpy in radians and then taking L2 norm
+def compute_pose_rotation_err(expected_pose, curr_pose):
+    err = np.linalg.norm(expected_pose[3:]-curr_pose[3:])*180/np.pi
+    return err
+
+# Function to calculate the overall error in position using sum of position and rotation errors
+def compute_pose_overall_err(expected_pose, curr_pose):
+    err = compute_pose_position_err(expected_pose, curr_pose) + compute_pose_rotation_err(expected_pose, curr_pose)
+    return err
+
+# Function to plot the histogram of pose and rotation errors
+def draw_pose_err_hist(expected_pose, r_vec, t_vec):
+    curr_pose = make_pose_xyzrpy(t_vec, r_vec)
+    pos_err = compute_pose_position_err(expected_pose, curr_pose)
+    rot_err = compute_pose_rotation_err(expected_pose, curr_pose)
+    tot_err = compute_pose_overall_err(expected_pose, curr_pose)
+    names = ['position_err', 'rotation_err', 'total_err']
+    err_axis = [pos_err, rot_err, tot_err]
+    figure = plt.figure(figsize=(9,6))
+    plt.bar(names, err_axis)
+    plt.ylabel("Error in cm and degrees")
+    plt.show()
+
+
 
 '''
 stop  -> 397, 115, 458, 177
@@ -155,6 +192,7 @@ if CASE == 0:
     box_br_x = 458
     box_br_y = 177
     img = img1
+    actual_pose = np.array([-1990.0, -2000.0, 6010.0, -np.pi, 0.0, 0.0])
 
 elif CASE == 1:
     box_tl_x = 596
@@ -162,6 +200,7 @@ elif CASE == 1:
     box_br_x = 655
     box_br_y = 162
     img = img2
+    actual_pose = np.array([-697.0, -2000.0, 6010.0, -np.pi, 0.0, 0.0])
 
 elif CASE == 2:
     box_tl_x = 494
@@ -169,6 +208,7 @@ elif CASE == 2:
     box_br_x = 535
     box_br_y = 222
     img = img3
+    actual_pose = np.array([-1990.0, -2000.0, 7170.0, -np.pi, 0.0, 0.0])
 
 elif CASE == 3:
     box_tl_x = 696
@@ -176,6 +216,7 @@ elif CASE == 3:
     box_br_x = 726
     box_br_y = 210
     img = img4
+    actual_pose = np.array([-1990.0, -2000.0, 6010.0, -np.pi, np.pi/4, 0.0])
 
 
 # Adjusted box dimensions
@@ -267,7 +308,7 @@ for contour in contours:
         print("Final t vec is: ", t_vec.reshape((3)))
         print("Transformation matrix is: \n" ,T)
         roll, pitch, yaw = rotation_matrix_to_euler_angles(T[:3, :3])
-        r = Rotation.from_euler('xyz', [roll, pitch, yaw], degrees=True)
+        r = Rotation.from_euler('xyz', [roll, pitch, yaw], degrees=False)
         rotation_matrix = r.as_matrix()
         print("The roll, pitch, yaw are: ", roll, pitch, yaw )
         print(rotation_matrix)
@@ -275,6 +316,9 @@ for contour in contours:
 
         # Draw coordinate frame on image
         draw_obj_frame(r_vec, t_vec, img, image_points=final_img_pts, axis_len=700, axis_thickness=3)
+
+        # Plot the error between calculated pose and actual pose
+        draw_pose_err_hist(actual_pose, r_vec, t_vec)
 
 
 
