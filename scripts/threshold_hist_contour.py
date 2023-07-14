@@ -31,7 +31,7 @@ import base_cam_transformation as trans
 # Reading the path
 curr_pwd = os.getcwd()
 img_path = curr_pwd + "/.." + '/src_imgs/'
-CASE = 1
+CASE = 0
 margin_percent = 1 / 100
 dist_coeffs = np.array([0.0, 0.0, 0.0, 0.0, 0.0])
 K = np.array([[521.8381958007812, 0.0, 684.0656127929688], 
@@ -116,9 +116,9 @@ def rvec_to_euler_angles(r_vec):
     roll, pitch, yaw = euler[0], euler[1], euler[2]
     return roll, pitch, yaw
 
-def rotation_matrix_to_euler_angles(R):
+def rotation_matrix_to_euler_angles(R, degrees=False):
     r = Rotation.from_matrix(R)
-    euler = r.as_euler('xyz', degrees=False)
+    euler = r.as_euler('xyz', degrees)
     roll, pitch, yaw = euler[0], euler[1], euler[2]
     return roll, pitch, yaw
 
@@ -161,12 +161,20 @@ def draw_pose_err_hist(expected_pose, r_vec, t_vec):
     pos_err = compute_pose_position_err(expected_pose, curr_pose)
     rot_err = compute_pose_rotation_err(expected_pose, curr_pose)
     tot_err = compute_pose_overall_err(expected_pose, curr_pose)
-    names = ['position_err', 'rotation_err', 'total_err']
-    err_axis = [pos_err, rot_err, tot_err]
-    figure = plt.figure(figsize=(9,6))
+    x_err = abs(expected_pose[0] - curr_pose[0])/10
+    y_err = abs(expected_pose[1] - curr_pose[1])/10
+    z_err = abs(expected_pose[2] - curr_pose[2])/10
+    roll_err  = abs(expected_pose[3] - curr_pose[3])*180/np.pi
+    pitch_err = abs(expected_pose[4] - curr_pose[4])*180/np.pi
+    yaw_err   = abs(expected_pose[5] - curr_pose[5])*180/np.pi
+    names = ['x_error', 'y_error', 'z_error', 'position_err', 'roll_error', 'pitch_error', 'yaw_error', 'rotation_err', 'total_err']
+    err_axis = [x_err, y_err, z_err, pos_err, roll_err, pitch_err, yaw_err, rot_err, tot_err]
+    figure = plt.figure(figsize=(15,8))
     plt.bar(names, err_axis)
     plt.ylabel("Error in cm and degrees")
+    plt.savefig("../results/error_graph_"+str(CASE)+".png")
     plt.show()
+
 
 
 
@@ -307,7 +315,7 @@ for contour in contours:
         # T = T @ trans.T_final
         print("Final t vec is: ", t_vec.reshape((3)))
         print("Transformation matrix is: \n" ,T)
-        roll, pitch, yaw = rotation_matrix_to_euler_angles(T[:3, :3])
+        roll, pitch, yaw = rotation_matrix_to_euler_angles(T[:3, :3], degrees=True)
         r = Rotation.from_euler('xyz', [roll, pitch, yaw], degrees=False)
         rotation_matrix = r.as_matrix()
         print("The roll, pitch, yaw are: ", roll, pitch, yaw )
@@ -316,14 +324,10 @@ for contour in contours:
 
         # Draw coordinate frame on image
         draw_obj_frame(r_vec, t_vec, img, image_points=final_img_pts, axis_len=700, axis_thickness=3)
+        cv2.imwrite("../results/estimated_frame_"+str(CASE)+".jpg", img)
 
         # Plot the error between calculated pose and actual pose
         draw_pose_err_hist(actual_pose, r_vec, t_vec)
-
-
-
-        # print("Rotation matrix", )
-        # rotation_matrix_to_euler_angles(R)
 
 
 
