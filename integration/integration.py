@@ -161,8 +161,82 @@ def find_cam_pose_PnP(img_pts, world_pts_3d):
     retval, r_vec, t_vec = cv2.solvePnP(world_pts_3d, img_pts.astype(np.float64), K, dist_coeffs, flags=cv2.SOLVEPNP_ITERATIVE)
     print("Final t vec is: ", t_vec.reshape((3)))
 
+# Function to compute the transformation matrix for the translation and rotation vector (axis-angle representation) returned by solvePnP cv2 function
+def compute_T_from_vecs(retval, r_vec, t_vec):
+    if retval == False:
+        return None
+
+    R, _ = cv2.Rodrigues(r_vec)
+    T = np.column_stack((R, t_vec))
+    T = np.vstack((T, [0,0,0,1]))
+
+    return T
+
+# Function to get euler angles of rotation from rotation vector (axis-angle representation)
+def rvec_to_euler_angles(r_vec):
+    R, _ = cv2.Rodrigues(r_vec)
+    r = Rotation.from_matrix(R)
+    euler = r.as_euler('xyz', degrees=False)
+    roll, pitch, yaw = euler[0], euler[1], euler[2]
+    return roll, pitch, yaw
+
+# Function to get euler angles from rotation matrix
+def rotation_matrix_to_euler_angles(R):
+    r = Rotation.from_matrix(R)
+    euler = r.as_euler('xyz', degrees=False)
+    roll, pitch, yaw = euler[0], euler[1], euler[2]
+    return roll, pitch, yaw
+
+# Function to draw the estimated co-ordinate frame of object in image frame
+def draw_obj_frame(r_vec, t_vec, img, image_points, axis_len=700, axis_thickness=3):
+    global K, dist_coeffs
+    axes = np.array([[axis_len,0,0], [0,axis_len,0], [0,0,axis_len]], dtype=np.float32)
+    img_axes, jacobian = cv2.projectPoints(axes, r_vec, t_vec, K, dist_coeffs)
+    img_axes = img_axes.reshape(-1, 2).astype(np.int32)
+    axis_origin = (image_points[5]+image_points[6])//2
+    cv2.line(img, axis_origin, img_axes[0], (255,0,0), axis_thickness)
+    cv2.line(img, axis_origin, img_axes[1], (0,255,0), axis_thickness)
+    cv2.line(img, axis_origin, img_axes[2], (0,0,255), axis_thickness)
 
 
+# Function to make a pose in ROS format viz. x, y, z, roll, pitch, yaw
+def make_pose_xyzrpy(pos_vec, r_vec):
+    roll, pitch, yaw = rvec_to_euler_angles(r_vec)
+    euler_vec = np.array([roll, pitch, yaw], dtype=np.float32)
+    curr_pose = np.append(pos_vec, euler_vec)
+    return curr_pose
+
+# Function to calculate the error in position of 2 poses using L2 norm
+def compute_pose_position_err(expected_pose, curr_pose):
+    err = np.linalg.norm(expected_pose[:3]-curr_pose[:3])/10  # To make error in cm
+    return err
+
+# Function to calculate the rotational difference of 2 poses using rpy in radians and then taking L2 norm
+def compute_pose_rotation_err(expected_pose, curr_pose):
+    err = np.linalg.norm(expected_pose[3:]-curr_pose[3:])*180/np.pi
+    return err
+
+# Function to calculate the overall error in position using sum of position and rotation errors
+def compute_pose_overall_err(expected_pose, curr_pose):
+    err = compute_pose_position_err(expected_pose, curr_pose) + compute_pose_rotation_err(expected_pose, curr_pose)
+    return err
+
+# Function to plot the histogram of pose and rotation errors
+def draw_pose_err_hist(expected_pose, r_vec, t_vec):
+    curr_pose = make_pose_xyzrpy(t_vec, r_vec)
+    pos_err = compute_pose_position_err(expected_pose, curr_pose)
+    rot_err = compute_pose_rotation_err(expected_pose, curr_pose)
+    tot_err = compute_pose_overall_err(expected_pose, curr_pose)
+    names = ['position_err', 'rotation_err', 'total_err']
+    err_axis = [pos_err, rot_err, tot_err]
+    figure = plt.figure(figsize=(9,6))
+    plt.bar(names, err_axis)
+    plt.ylabel("Error in cm and degrees")
+    plt.show()
+
+
+
+# The most important function that uses YOLOv7 to detect objects in frame, detect corners of stop signs and then estimate the 3D pose of them
 def detect(save_img=False):
     source, weights, view_img, save_txt, imgsz, trace = opt.source, opt.weights, opt.view_img, opt.save_txt, opt.img_size, not opt.no_trace
     save_img = not opt.nosave and not source.endswith('.txt')  # save inference images
