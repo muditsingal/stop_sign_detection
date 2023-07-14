@@ -31,7 +31,7 @@ import base_cam_transformation as trans
 # Reading the path
 curr_pwd = os.getcwd()
 img_path = curr_pwd + "/.." + '/src_imgs/'
-CASE = 3
+CASE = 1
 margin_percent = 1 / 100
 dist_coeffs = np.array([0.0, 0.0, 0.0, 0.0, 0.0])
 K = np.array([[521.8381958007812, 0.0, 684.0656127929688], 

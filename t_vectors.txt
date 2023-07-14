@@ -9,22 +9,6 @@ Case3: (45 degrees tilt)
 x: 4785, y: stop sign height , z: 6010
 
 
-
-Using H matrix inbuilt function:
-Case0:
-T vector is:  [-487.30989845  127.91706574  117.57107212]
-
-Case1:
-T vector is:  [-689.91120603  122.10723493   26.25637987]
-
-Case2:
-T vector is:  [ 475.95570194 -244.88694364   80.48304437]
-
-Case3:
-T vector is:  [ 797.09852716 -315.74806278  138.47106853]
-
-
-
 Using custom function:
 Case0:
 T vector is:  [-2695.219703   -1751.43613059  5251.49984755]
