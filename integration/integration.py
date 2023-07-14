@@ -159,7 +159,9 @@ def find_cam_pose_homography(img_pts, world_pts_2d):
 def find_cam_pose_PnP(img_pts, world_pts_3d):
     global K, dist_coeffs
     retval, r_vec, t_vec = cv2.solvePnP(world_pts_3d, img_pts.astype(np.float64), K, dist_coeffs, flags=cv2.SOLVEPNP_ITERATIVE)
-    print("Final t vec is: ", t_vec.reshape((3)))
+    est_pose = make_pose_xyzrpy(t_vec, r_vec)
+    # print("Final t vec is: ", t_vec.reshape((3)))
+    return est_pose
 
 # Function to compute the transformation matrix for the translation and rotation vector (axis-angle representation) returned by solvePnP cv2 function
 def compute_T_from_vecs(retval, r_vec, t_vec):
@@ -204,7 +206,7 @@ def make_pose_xyzrpy(pos_vec, r_vec):
     roll, pitch, yaw = rvec_to_euler_angles(r_vec)
     euler_vec = np.array([roll, pitch, yaw], dtype=np.float32)
     curr_pose = np.append(pos_vec, euler_vec)
-    return curr_pose
+    return curr_pose, r_vec, pos_vec
 
 # Function to calculate the error in position of 2 poses using L2 norm
 def compute_pose_position_err(expected_pose, curr_pose):
@@ -339,7 +341,12 @@ def detect(save_img=False):
 
                         masked_img = mask_img_hist(im0, box_tl_x, box_tl_y, box_br_x, box_br_y, margin_x, margin_y)
                         corner_img_pts = find_sign_corners(masked_img)
-                        find_cam_pose_PnP(corner_img_pts, pt_src.pts_3d)
+                        estimated_pose, rvec, tvec = find_cam_pose_PnP(corner_img_pts, pt_src.pts_3d)
+                        draw_obj_frame(rvec, tvec, im0, image_points=corner_img_pts, axis_len=700, axis_thickness=3)
+                        print("Estimated pose is: ", estimated_pose)
+
+            if save_img:
+                cv2.imwrite(save_path, im0)
 
 
             # Print time (inference + NMS)
